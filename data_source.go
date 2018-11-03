@@ -379,9 +379,15 @@ func (ds *AnySource) WriteControl(config *WriteControlConfig) error {
 			path = config.Path
 		}
 		var err error
-		filenamePattern, err = makeDirectory(path)
-		if err != nil {
-			return fmt.Errorf("Could not make directory: %s", err.Error())
+
+		if config.FilenamePattern == "" { // was not provided, as it should not be, unless you're jamie
+			filenamePattern, err = makeDirectory(path)
+			if err != nil {
+				return fmt.Errorf("Could not make directory: %s", err.Error())
+			}
+		} else {
+			log.Println("overridding the default file naming beavhior!!! you should only see this if you are Jamie!!")
+			filenamePattern = config.FilenamePattern // the special override case for Jamie
 		}
 		if config.WriteOFF {
 			// throw an error if no channels have projectors set

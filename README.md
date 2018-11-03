@@ -5,7 +5,7 @@ A data acquisition framework for NIST transition-edge sensor (TES) microcalorime
 
 ## Installation
  * Requires Ubuntu 16.
- 
+
  ```
  sudo add-apt-repository 'deb http://download.opensuse.org/repositories/network:/messaging:/zeromq:/git-stable/xUbuntu_16.04/ ./'
 cd ~/Downloads
@@ -19,6 +19,9 @@ go get -u github.com/usnistgov/dastard
  * Install microscope https://github.com/usnistgov/microscope
  * Install dastard-commander https://github.com/usnistgov/dastard-commander
 
+#### On MacOS you can get it to run with macports, but you will need
+ * `sudo cp /opt/local/lib/pkgconfig/libzmq.pc /opt/local/lib/pkgconfig/zmq.pc` to work around a bug in macports
+ 
 ## Purpose
 
 DASTARD is the Data Acquisition System for Triggering, Analyzing, and Recording Data. It is to be used with TES microcalorimeter arrays and the NIST Time-Division Multiplexed (TDM) readout or--in the future--the Microwave Multiplexed readout.

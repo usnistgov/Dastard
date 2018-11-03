@@ -351,9 +351,11 @@ func (s *SourceControl) WaitForStopTestingOnly(dummy *string, reply *bool) error
 // WriteControlConfig object to control start/stop/pause of data writing
 // Path and FileType are ignored for any request other than Start
 type WriteControlConfig struct {
-	Request    string // "Start", "Stop", "Pause", or "Unpause", or "Unpause label"
-	Path       string // write in a new directory under this path
-	WriteLJH22 bool   // turn on one or more file formats
+	Request         string // "Start", "Stop", "Pause", or "Unpause", or "Unpause label"
+	Path            string // write in a new directory under this path
+	FilenamePattern string // only Jamie should use this, just to make his transition easier
+	// overrides path and the default behavior of choosing filenames automatically
+	WriteLJH22 bool // turn on one or more file formats
 	WriteOFF   bool
 	WriteLJH3  bool
 }
