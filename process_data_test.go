@@ -176,7 +176,7 @@ func TestDataSignedness(t *testing.T) {
 	// Make sure PrepareRun produces the right answers.
 	var ts TriangleSource
 	ts.nchan = 4
-	ts.PrepareRun()
+	ts.PrepareRun(256, 1024)
 	defer ts.Stop()
 	for i, dsp := range ts.processors {
 		expect := false
@@ -192,7 +192,7 @@ func TestDataSignedness(t *testing.T) {
 	for i := 0; i < ls.nchan; i += 2 {
 		ls.signed[i] = true
 	}
-	ls.PrepareRun()
+	ls.PrepareRun(256, 1024)
 	defer ls.Stop()
 	for i, dsp := range ls.processors {
 		expect := (i % 2) == 0
@@ -206,7 +206,9 @@ func TestDataSignedness(t *testing.T) {
 	data := make([]RawType, len(errsig))
 	copy(data, errsig)
 	seg := &DataSegment{rawData: data}
-	dsp := NewDataStreamProcessor(0, nil)
+	NPresamples := 256
+	NSamples := 1024
+	dsp := NewDataStreamProcessor(0, nil, NPresamples, NSamples)
 	dsp.DecimateLevel = 2
 	dsp.Decimate = true
 	dsp.DecimateAvgMode = true

@@ -25,3 +25,4 @@ tstfile
 *.off
 dastard
 !dastard/
+.idea

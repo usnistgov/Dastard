@@ -117,7 +117,7 @@ func TestNoHardwareSource(t *testing.T) {
 		t.Error("LanceroSource.Configure fails:", err)
 	}
 
-	if err := Start(source, nil); err != nil {
+	if err := Start(source, nil, 256, 1024); err != nil {
 		source.Stop()
 		t.Fatal(err)
 	}

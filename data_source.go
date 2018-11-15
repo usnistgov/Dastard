@@ -32,7 +32,7 @@ const (
 // produce data.
 type DataSource interface {
 	Sample() error
-	PrepareRun() error
+	PrepareRun(int, int) error
 	StartRun() error
 	Stop() error
 	Running() bool
@@ -57,6 +57,7 @@ type DataSource interface {
 	RunDoneActivate()
 	RunDoneDeactivate()
 	ShouldAutoRestart() bool
+	getPulseLengths() (int, int, error)
 }
 
 // RunDoneActivate adds one to ds.runDone, this should only be called in Start
@@ -105,7 +106,7 @@ func (ds *AnySource) getNextBlock() chan *dataBlock {
 // 3) StartRun: a per-source method to begin data acquisition, if relevant.
 // 4) Loop over calls to ds.blockingRead(), a per-source method that waits for data.
 // When done with the loop, close all channels to DataStreamProcessor objects.
-func Start(ds DataSource, queuedRequests chan func()) error {
+func Start(ds DataSource, queuedRequests chan func(), Npresamp int, Nsamples int) error {
 	if err := ds.SetStateStarting(); err != nil {
 		return err
 	}
@@ -114,7 +115,7 @@ func Start(ds DataSource, queuedRequests chan func()) error {
 		return err
 	}
 
-	if err := ds.PrepareRun(); err != nil {
+	if err := ds.PrepareRun(Npresamp, Nsamples); err != nil {
 		return err
 	}
 
@@ -260,6 +261,21 @@ type AnySource struct {
 	sourceStateLock     sync.Mutex // guards sourceState
 	runDone             sync.WaitGroup
 	readCounter         int
+}
+
+// getPulseLengths returns (NPresamples, NSamples, err)
+func (ds *AnySource) getPulseLengths() (int, int, error) {
+	if len(ds.processors) < 1 {
+		return 0, 0, fmt.Errorf("len(ds.processors)=%v, cannot getPulseLengths", len(ds.processors))
+	}
+	NPresamples := ds.processors[0].NPresamples
+	NSamples := ds.processors[0].NSamples
+	for _, dsp := range ds.processors {
+		if dsp.NPresamples != NPresamples || dsp.NSamples != NSamples {
+			return 0, 0, fmt.Errorf("not all processors have same record lengths, NPresamples %v, dsp.NPresample %v, NSamples %v, dsp.NSamples %v", NPresamples, dsp.NPresamples, NSamples, dsp.NSamples)
+		}
+	}
+	return NPresamples, NSamples, nil
 }
 
 // ProcessSegments processes a single outstanding segment for each of ds.processors
@@ -604,7 +620,7 @@ func (ds *AnySource) setDefaultChannelNames() {
 // PrepareRun configures an AnySource by initializing all data structures that
 // cannot be prepared until we know the number of channels. It's an error for
 // ds.nchan to be less than 1.
-func (ds *AnySource) PrepareRun() error {
+func (ds *AnySource) PrepareRun(Npresamples int, Nsamples int) error {
 	if ds.nchan <= 0 {
 		return fmt.Errorf("PrepareRun could not run with %d channels (expect > 0)", ds.nchan)
 	}
@@ -651,7 +667,7 @@ func (ds *AnySource) PrepareRun() error {
 	}
 
 	for channelIndex := range ds.processors {
-		dsp := NewDataStreamProcessor(channelIndex, ds.broker)
+		dsp := NewDataStreamProcessor(channelIndex, ds.broker, Npresamples, Nsamples)
 		dsp.Name = ds.chanNames[channelIndex]
 		dsp.SampleRate = ds.sampleRate
 		dsp.stream.signed = signed[channelIndex]

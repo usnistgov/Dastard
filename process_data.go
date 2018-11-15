@@ -67,17 +67,15 @@ func (dsp *DataStreamProcessor) HasProjectors() bool {
 }
 
 // NewDataStreamProcessor creates and initializes a new DataStreamProcessor.
-func NewDataStreamProcessor(channelIndex int, broker *TriggerBroker) *DataStreamProcessor {
+func NewDataStreamProcessor(channelIndex int, broker *TriggerBroker, NPresamples int, NSamples int) *DataStreamProcessor {
 	data := make([]RawType, 0, 1024)
 	framesPerSample := 1
 	firstFrame := FrameIndex(0)
 	firstTime := time.Now()
 	period := time.Duration(1 * time.Millisecond) // TODO: figure out what this ought to be, or make an argument
 	stream := NewDataStream(data, framesPerSample, firstFrame, firstTime, period)
-	nsamp := 1024 // TODO: figure out what this ought to be, or make an argument
-	npre := 256   // TODO: figure out what this ought to be, or make an argument
 	dsp := DataStreamProcessor{channelIndex: channelIndex, Broker: broker,
-		stream: *stream, NSamples: nsamp, NPresamples: npre,
+		stream: *stream, NSamples: NSamples, NPresamples: NPresamples,
 	}
 	dsp.LastTrigger = math.MinInt64 / 4 // far in the past, but not so far we can't subtract from it
 	dsp.projectors.Reset()              // dsp.projectors is set to zero value
