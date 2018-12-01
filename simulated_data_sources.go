@@ -85,6 +85,7 @@ func (ts *TriangleSource) Sample() error {
 	for i := 0; i < ts.nchan; i++ {
 		ts.chanNames[i] = fmt.Sprintf("chan%d", i+1)
 		ts.chanNumbers[i] = i + 1
+		ts.rowColCodes[i] = rcCode(0, i, 1, ts.nchan)
 	}
 	return nil
 }
@@ -213,6 +214,7 @@ func (sps *SimPulseSource) Sample() error {
 	for i := 0; i < sps.nchan; i++ {
 		sps.chanNames[i] = fmt.Sprintf("chan%d", i+1)
 		sps.chanNumbers[i] = i + 1
+		sps.rowColCodes[i] = rcCode(0, i, 1, sps.nchan)
 	}
 	return nil
 }

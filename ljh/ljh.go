@@ -151,17 +151,14 @@ func (w *Writer) WriteHeader(firstRecord time.Time) error {
 	timestamp := float64(w.TimestampOffset.UnixNano()) / 1e9
 	firstrec := firstRecord.Format("02 Jan 2006, 15:04:05 MST")
 
-	rowColText := "Number of rows: 0\nNumber of columns: 0"
-	if w.SourceName == "Lancero" {
-		rowColText = fmt.Sprintf(`Number of rows: %d
+	rowColText := fmt.Sprintf(`Number of rows: %d
 Number of columns: %d
 Row number (from 0-%d inclusive): %d
 Column number (from 0-%d inclusive): %d`,
-			w.NumberOfRows, w.NumberOfColumns,
-			w.NumberOfRows-1, w.RowNum,
-			w.NumberOfColumns-1, w.ColumnNum,
-		)
-	}
+		w.NumberOfRows, w.NumberOfColumns,
+		w.NumberOfRows-1, w.RowNum,
+		w.NumberOfColumns-1, w.ColumnNum,
+	)
 	s := fmt.Sprintf(`#LJH Memorial File Format
 Save File Format Version: 2.2.1
 Software Version: DASTARD version %s

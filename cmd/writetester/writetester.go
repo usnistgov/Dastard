@@ -1,28 +1,57 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"sync"
 	"time"
-
-	"github.com/usnistgov/dastard/ljh"
 )
 
-const flushWithinBlock = false
+const flushWithinBlock = true
 const flushAfterBlocks = true
 
+type Writer struct {
+	FileName      string
+	headerWritten bool
+	writer        *bufio.Writer
+}
+
+func (w *Writer) writeHeader() error {
+	file, err := os.Create(w.FileName)
+	if err != nil {
+		return err
+	}
+	w.writer = bufio.NewWriterSize(file, 32768)
+	w.writer.WriteString("HEADER\n")
+	w.headerWritten = true
+	return nil
+}
+
+func (w *Writer) writeRecord(nBytes int) error {
+	data := make([]byte, nBytes)
+	nWritten, err := w.writer.Write(data)
+	if nWritten != nBytes {
+		return fmt.Errorf("wrong number of bytes written")
+	}
+	return err
+}
+
 func main() {
-	dirname := "/data/testertmp/"
+	dirname, err0 := ioutil.TempDir("", "")
+	if err0 != nil {
+		panic(err0)
+	}
 	fmt.Println(dirname)
-	recordLength := 300
-	N := 500
-	recordsPerChanPerTick := 10
-	writers := make([]ljh.Writer, N)
+	recordLength := 500
+	numberOfChannels := 240
+	recordsPerChanPerTick := 5
+	writers := make([]*Writer, numberOfChannels)
 	abortChan := make(chan struct{})
 	for i := range writers {
-		writers[i] = ljh.Writer{FileName: fmt.Sprintf("%v%v.ljh", dirname, i), ChannelIndex: i, Samples: recordLength}
+		writers[i] = &Writer{FileName: fmt.Sprintf("%v/%v.ljh", dirname, i)}
 	}
 	go func() {
 		signalChan := make(chan os.Signal)
@@ -35,72 +64,71 @@ func main() {
 	ticker := time.NewTicker(tickDuration)
 	z := 0
 	tLast := time.Now()
-	fmt.Printf("recordsPerChanPerTick %v, Chans %v, tickDuration %v\n", recordsPerChanPerTick, N, tickDuration)
-	fmt.Printf("records/second/chan %v, records/second total %v\n", float64(recordsPerChanPerTick)/tickDuration.Seconds(), float64(recordsPerChanPerTick*N)/tickDuration.Seconds())
-	fmt.Printf("megabytes/second total %v\n", float64(recordLength*2+8+8)*float64(recordsPerChanPerTick*N)/tickDuration.Seconds()*1e-6)
+	fmt.Printf("recordsPerChanPerTick %v, Chans %v, tickDuration %v\n", recordsPerChanPerTick, numberOfChannels, tickDuration)
+	fmt.Printf("records/second/chan %v, records/second total %v\n", float64(recordsPerChanPerTick)/tickDuration.Seconds(), float64(recordsPerChanPerTick*numberOfChannels)/tickDuration.Seconds())
+	fmt.Printf("megabytes/second total %v\n", float64(recordLength)*float64(recordsPerChanPerTick*numberOfChannels)/tickDuration.Seconds()*1e-6)
 	fmt.Printf("flushWithinBlock %v, flushAfterBlocks %v\n", flushWithinBlock, flushAfterBlocks)
 	for {
 		z++
+		// 1. here we would get data from data source
 		select {
 		case <-abortChan:
 			fmt.Println("clean exit")
 			return
 		case <-ticker.C:
 			var wg sync.WaitGroup
-			writeDurations := make([]time.Duration, N)
-			flushDurations := make([]time.Duration, N)
+			writeDurations := make([]time.Duration, numberOfChannels)
+			flushDurations := make([]time.Duration, numberOfChannels)
 			for i, w := range writers {
-				records := make([]Record, recordsPerChanPerTick)
-				for j := range records {
-					records[j] = Record{framecount: int64(z*10000 + j), timestamp: int64(z*10000 + i), data: make([]uint16, recordLength)}
-				}
 				wg.Add(1)
-				go func(w ljh.Writer, records []Record, i int) {
+				go func(w *Writer, i int) {
+					// 2. here we would process data, we launch one goroutine per channel to parallelize this processing
 					tStart := time.Now()
 					defer wg.Done()
-					for _, record := range records {
-						if !w.HeaderWritten {
-							err := w.CreateFile()
+					// 3. here we write data to disk, still within the same goroutines that did the processing
+					for j := 0; j < recordsPerChanPerTick; j++ {
+						if !w.headerWritten {
+							err := w.writeHeader()
 							if err != nil {
-								panic(fmt.Sprintf("failed create file: %v\n", err))
+								panic(fmt.Sprintf("failed create file and write header: %v\n", err))
 							}
-							w.WriteHeader(time.Now())
 						}
-						w.WriteRecord(record.framecount, record.timestamp, record.data)
+						w.writeRecord(recordLength)
 					}
 					tWrite := time.Now()
 					if flushWithinBlock {
-						w.Flush() // Flush here for terrible performance
+						w.writer.Flush()
 					}
 					writeDurations[i] = tWrite.Sub(tStart)
 					flushDurations[i] = time.Now().Sub(tWrite)
-				}(w, records, i)
+				}(w, i)
 			}
 			wg.Wait()
 			for _, w := range writers {
 				if flushAfterBlocks {
-					w.Flush() // Flush here or not at all for reasonable performance
+					w.writer.Flush()
 				}
 			}
 			var writeSum time.Duration
 			var flushSum time.Duration
+			var writeMax time.Duration
+			var flushMax time.Duration
 			for i := range writeDurations {
 				writeSum += writeDurations[i]
 				flushSum += flushDurations[i]
+				if writeDurations[i] > writeMax {
+					writeMax = writeDurations[i]
+				}
+				if flushDurations[i] > flushMax {
+					flushMax = flushDurations[i]
+				}
 			}
 			if z%100 == 0 || time.Now().Sub(tLast) > 75*time.Millisecond {
 				fmt.Printf("z %v, time.Now().Sub(tLast) %v\n", z, time.Now().Sub(tLast))
-				fmt.Printf("writeSum %v, flushSum %v\n", writeSum, flushSum)
+				fmt.Printf("writeMean %v, flushMean %v, writeMax %v, flushMax %v\n", writeSum/time.Duration(numberOfChannels), flushSum/time.Duration(numberOfChannels), writeMax, flushMax)
 			}
 			tLast = time.Now()
 		}
 	}
 
-}
-
-// Record does stuff
-type Record struct {
-	framecount int64
-	timestamp  int64
-	data       []uint16
 }
