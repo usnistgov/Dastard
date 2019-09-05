@@ -1,5 +1,8 @@
 ## DASTARD Versions
 
+**0.2.6** September 2019
+* Abaco data source uses packets.
+
 **0.2.5** September 5, 2019
 * Abaco data source works for streaming data (not packets).
 * Reset triggering memory on changing trigger settings.
