@@ -122,6 +122,9 @@ func (ws *WritingState) Stop() error {
 func (ws *WritingState) SetExperimentStateLabel(timestamp time.Time, stateLabel string) error {
 	ws.Lock()
 	defer ws.Unlock()
+	if !ws.Active {
+		return fmt.Errorf("cannot set experiment state label when writing is not active")
+	}
 	return ws.setExperimentStateLabel(timestamp, stateLabel)
 }
 

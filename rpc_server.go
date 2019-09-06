@@ -379,17 +379,27 @@ func (s *SourceControl) WaitForStopTestingOnly(dummy *string, reply *bool) error
 // WriteControlConfig object to control start/stop/pause of data writing
 // Path and FileType are ignored for any request other than Start
 type WriteControlConfig struct {
-	Request    string // "Start", "Stop", "Pause", or "Unpause", or "Unpause label"
-	Path       string // write in a new directory under this path
-	WriteLJH22 bool   // turn on one or more file formats
-	WriteOFF   bool
-	WriteLJH3  bool
-	m          *Map // for dastard internal use only, used to pass map info to DataStreamProcessors
+	Request         string // "Start", "Stop", "Pause", or "Unpause", or "Unpause label"
+	Path            string // write in a new directory under this path
+	WriteLJH22      bool   // turn on one or more file formats
+	WriteOFF        bool
+	WriteLJH3       bool
+	MapInternalOnly *Map // for dastard internal use only, used to pass map info to DataStreamProcessors
+}
+
+// mapError is used in WriteControl to indicate a map related error
+type mapError struct {
+	msg string
+}
+
+func (m mapError) Error() string {
+	return m.msg
 }
 
 // WriteControl requests start/stop/pause/unpause data writing
 func (s *SourceControl) WriteControl(config *WriteControlConfig, reply *bool) error {
-	config.m = s.mapServer.m
+
+	config.MapInternalOnly = s.mapServer.Map
 	f := func() {
 		err := s.ActiveSource.WriteControl(config)
 		if err == nil {
@@ -398,7 +408,16 @@ func (s *SourceControl) WriteControl(config *WriteControlConfig, reply *bool) er
 		s.queuedResults <- err
 	}
 	err := s.runLaterIfActive(f)
-	*reply = (err == nil)
+	//check if we have a map error, if so, invalidate the map
+	switch err.(type) {
+	case mapError:
+		var zero *int
+		s.mapServer.Unload(zero, reply)
+		*reply = err == nil
+		return fmt.Errorf("map file invalidated: %v", err)
+	default:
+	}
+	*reply = err == nil
 	return err
 }
 
@@ -410,7 +429,7 @@ type StateLabelConfig struct {
 }
 
 // SetExperimentStateLabel sets the experiment state label in the _experiment_state file
-// The timestamp is fixed as soon as the RPC command is recieved
+// The timestamp is fixed as soon as the RPC command is received
 func (s *SourceControl) SetExperimentStateLabel(config *StateLabelConfig, reply *bool) error {
 	timestamp := time.Now()
 	if config.WaitForError {
@@ -427,6 +446,7 @@ func (s *SourceControl) SetExperimentStateLabel(config *StateLabelConfig, reply 
 		f2 := func() {
 			err := s.runLaterIfActive(f)
 			if err != nil {
+				// panic here since this error could never be returned
 				panic(fmt.Sprintf("error with WaitForError==false in SetExperimentStateLabel. %s", spew.Sdump(err)))
 			}
 		}

@@ -6,7 +6,7 @@ func TestMap(t *testing.T) {
 	fname := "maps/ar14_30rows_map.cfg"
 	m, err := readMap(fname)
 	if err != nil {
-		t.Errorf("Could not read map %q: %v", fname, err)
+		t.Fatalf("Could not read map %q: %v", fname, err)
 	}
 	if m.Spacing != 520 {
 		t.Errorf("map.Spacing=%d, want 520", m.Spacing)

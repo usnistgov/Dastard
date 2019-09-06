@@ -212,10 +212,14 @@ func TestServer(t *testing.T) {
 	if err != nil {
 		t.Fatal("Could not open temporary directory")
 	}
-	defer os.RemoveAll(path)
+	defer os.RemoveAll(path) // clean up test files
 	wconfig := WriteControlConfig{Request: "Start", Path: path, WriteLJH22: true}
+	// we currently have a 240 channel map loaded, but only have 4 channels, so this should error and invalidate the map file
+	if err1 := client.Call("SourceControl.WriteControl", &wconfig, &okay); err1 == nil {
+		t.Error("expected an error because we should have a 240 channel map loaded instead of a 4 channel map", err1)
+	}
 	if err1 := client.Call("SourceControl.WriteControl", &wconfig, &okay); err1 != nil {
-		t.Error("SourceControl.WriteControl START error:", err1)
+		t.Error("map should have been invalidated, so this should work")
 	}
 	if err1 := client.Call("SourceControl.ConfigurePulseLengths", &sizes, &okay); err1 == nil {
 		t.Errorf("Expected error calling SourceControl.ConfigurePulseLengths(%v) when writing active, saw none", sizes)

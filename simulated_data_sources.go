@@ -2,6 +2,7 @@ package dastard
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"time"
 )
@@ -220,45 +221,51 @@ func (sps *SimPulseSource) Sample() error {
 // StartRun launches the repeated loop that generates Triangle data.
 func (sps *SimPulseSource) StartRun() error {
 	go func() {
+		log.Printf("starting SimPulseSource with cycleLen %v, nchan %v, timeperbuf %v\n",
+			sps.cycleLen, sps.nchan, sps.timeperbuf)
 		defer close(sps.nextBlock)
+		blocksSentSinceLastHeartbeat := 0
+		ticker := time.NewTicker(sps.timeperbuf)
+		heartbeatTicker := time.NewTicker(1 * time.Second)
 		for {
-			nextread := sps.lastread.Add(sps.timeperbuf)
-			waittime := time.Until(nextread)
-			var now time.Time
 			select {
 			case <-sps.abortSelf:
 				return
-			case <-time.After(waittime):
-				now = time.Now()
-				if sps.heartbeats != nil {
-					dt := now.Sub(sps.lastread).Seconds()
-					mb := float64(sps.cycleLen*2*sps.nchan) / 1e6
-					sps.heartbeats <- Heartbeat{Running: true, Time: dt, DataMB: mb}
+			case <-ticker.C:
+				//log.Println("SimPulseSource ticker has fired")
+				// Backtrack to find the time associated with the first sample.
+				firstTime := time.Now().Add(-sps.timeperbuf) // use now for accurate sample time
+				block := new(dataBlock)
+				block.segments = make([]DataSegment, sps.nchan)
+				for channelIndex := 0; channelIndex < sps.nchan; channelIndex++ {
+					datacopy := make([]RawType, sps.cycleLen)
+					copy(datacopy, sps.onecycle)
+					for i := 0; i < sps.cycleLen; i++ {
+						datacopy[i] += RawType(rand.Intn(21) - 10)
+					}
+					seg := DataSegment{
+						rawData:         datacopy,
+						framesPerSample: 1,
+						framePeriod:     sps.samplePeriod,
+						firstFramenum:   sps.nextFrameNum,
+						firstTime:       firstTime,
+					}
+					block.segments[channelIndex] = seg
 				}
-				sps.lastread = nextread // ensure average cycle time is correct, using now would allow error to build up
+				sps.nextFrameNum += FrameIndex(sps.cycleLen)
+				sps.nextBlock <- block
+				sps.lastread = time.Now()
+				blocksSentSinceLastHeartbeat += 1
+			case <-heartbeatTicker.C:
+				if sps.heartbeats != nil {
+					dataBytes := blocksSentSinceLastHeartbeat * (sps.cycleLen * 2 * sps.nchan)
+					sps.heartbeats <- Heartbeat{Running: true,
+						Time:   sps.timeperbuf.Seconds() * float64(blocksSentSinceLastHeartbeat),
+						DataMB: float64(dataBytes) / 1e6}
+					blocksSentSinceLastHeartbeat = 0
+				}
 			}
 
-			// Backtrack to find the time associated with the first sample.
-			firstTime := now.Add(-sps.timeperbuf) // use now for accurate sample time
-			block := new(dataBlock)
-			block.segments = make([]DataSegment, sps.nchan)
-			for channelIndex := 0; channelIndex < sps.nchan; channelIndex++ {
-				datacopy := make([]RawType, sps.cycleLen)
-				copy(datacopy, sps.onecycle)
-				for i := 0; i < sps.cycleLen; i++ {
-					datacopy[i] += RawType(rand.Intn(21) - 10)
-				}
-				seg := DataSegment{
-					rawData:         datacopy,
-					framesPerSample: 1,
-					framePeriod:     sps.samplePeriod,
-					firstFramenum:   sps.nextFrameNum,
-					firstTime:       firstTime,
-				}
-				block.segments[channelIndex] = seg
-			}
-			sps.nextFrameNum += FrameIndex(sps.cycleLen)
-			sps.nextBlock <- block
 		}
 	}()
 	return nil

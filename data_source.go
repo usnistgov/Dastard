@@ -536,6 +536,13 @@ func (ds *AnySource) writeControlStart(config *WriteControlConfig) error {
 			return fmt.Errorf("no projectors are loaded, OFF files require projectors")
 		}
 	}
+	channelsPerPixel := ds.ChannelsPerPixel()
+	if config.MapInternalOnly != nil {
+		if len(config.MapInternalOnly.Pixels) != ds.nchan/channelsPerPixel {
+			return mapError{msg: fmt.Sprintf("map error: have length %v, want %v, want value calculated as (nchan %v / channelsPerPixel %v)",
+				len(config.MapInternalOnly.Pixels), ds.nchan/channelsPerPixel, ds.nchan, channelsPerPixel)}
+		}
+	}
 	path := ds.writingState.BasePath
 	if len(config.Path) > 0 {
 		path = config.Path
@@ -543,7 +550,7 @@ func (ds *AnySource) writeControlStart(config *WriteControlConfig) error {
 	var err error
 	filenamePattern, err := makeDirectory(path)
 	if err != nil {
-		return fmt.Errorf("Could not make directory: %s", err.Error())
+		return fmt.Errorf("could not make directory: %s", err.Error())
 	}
 
 	channelsWithOff := 0
@@ -556,13 +563,10 @@ func (ds *AnySource) writeControlStart(config *WriteControlConfig) error {
 		colNum := rccode.col()
 		fps := 1
 		var pixel Pixel
-		if config.m != nil && len(config.m.Pixels) > i {
-			pixel = config.m.Pixels[i]
-		} else {
-			const MaxUint = ^uint(0)
-			const MaxInt = int(MaxUint >> 1)
-			const MinInt = -MaxInt - 1 // cauclate MinInt following https://stackoverflow.com/questions/6878590/the-maximum-value-for-an-int-type-in-go
-			pixel = Pixel{Name: "no map information", X: MinInt, Y: MinInt}
+
+		if config.MapInternalOnly != nil {
+			channelNumber := ds.chanNumbers[i]
+			pixel = config.MapInternalOnly.Pixels[channelNumber-1]
 		}
 		if dsp.Decimate {
 			fps = dsp.DecimateLevel
@@ -820,6 +824,27 @@ func (ds *AnySource) ConfigurePulseLengths(nsamp, npre int) error {
 // SetCoupling is not allowed for generic data sources
 func (ds *AnySource) SetCoupling(status CouplingStatus) error {
 	return fmt.Errorf("Generic data sources do not support FB/error coupling")
+}
+
+// ChannelsPerPixel return the number of challes per pixel, eg 2 for LanceroSource since each pixel has chan and err
+func (ds *AnySource) ChannelsPerPixel() int {
+
+	// minMax return the minimum and maximum value of an int slice
+	minMax := func(array []int) (int, int) {
+		var max int = array[0]
+		var min int = array[0]
+		for _, value := range array {
+			if max < value {
+				max = value
+			}
+			if min > value {
+				min = value
+			}
+		}
+		return min, max
+	}
+	_, max := minMax(ds.chanNumbers)
+	return max / ds.nchan
 }
 
 // DataSegment is a continuous, single-channel raw data buffer, plus info about (e.g.)
